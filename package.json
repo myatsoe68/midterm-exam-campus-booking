@@ -1,0 +1,27 @@
+{
+  "name": "midterm_exam",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "build": "wrangler deploy --dry-run",
+    "types": "wrangler types",
+    "test": "echo \"No automated tests configured; use curl_test_guide.md\""
+  },
+  "keywords": [
+    "hono",
+    "cloudflare-workers",
+    "d1",
+    "booking-api"
+  ],
+  "type": "module",
+  "dependencies": {
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "wrangler": "^4.147.0"
+  }
+}
