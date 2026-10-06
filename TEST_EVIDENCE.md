@@ -1,21 +1,14 @@
-# curl Test Evidence
+# cURL Test Evidence
 
-Base URL: `https://campus-equipment-booking-api.course-management-api.workers.dev/api`
-using the deployed Cloudflare Worker and remote Cloudflare D1.
-
-The following production checks were run against the deployed Worker on
-2026-10-06 after applying `migrations/0001_initial.sql` with
-`wrangler d1 migrations apply campus-equipment-bookings --remote`.
-
-## 1. List bookings — success
-
-```text
-GET /bookings
-HTTP/2 200
-[]
+```bash
+BASE_URL="https://campus-equipment-booking-api.course-management-api.workers.dev/api"
 ```
 
-## 2. Seeded equipment — success
+The following tests were run in order against the deployed Worker and remote
+D1 database on 2026-10-06. The request payloads and order match
+[curl_test_guide.md](./curl_test_guide.md).
+
+## 1. List equipment — expect `200`
 
 ```text
 GET /equipment
@@ -23,39 +16,94 @@ HTTP/2 200
 [{"id":"eq-1","name":"Projector A","location":"Building 1"},{"id":"eq-2","name":"Camera Kit B","location":"Media Lab"}]
 ```
 
-## 3. Create booking — success
+## 2. List bookings — expect `200`
+
+```text
+GET /bookings
+HTTP/2 200
+[]
+```
+
+## 3. Create a booking — expect `201`
+
+Request body:
+
+```json
+{
+  "equipmentId": "eq-1",
+  "borrowerName": "Somchai Jaidee",
+  "startAt": "2026-10-20T09:00:00.000Z",
+  "endAt": "2026-10-20T11:00:00.000Z",
+  "purpose": "Class presentation"
+}
+```
+
+Response:
 
 ```text
 POST /bookings
 HTTP/2 201
-{"id":"04ba7f1d-16a3-49a1-aea9-dca4f159ac31","equipmentId":"eq-2","borrowerName":"Final Production Test","startAt":"2026-11-01T09:00:00.000Z","endAt":"2026-11-01T11:00:00.000Z","purpose":"Final CRUD verification"}
+{"id":"98c768ec-5302-494a-8208-42a6913a7f45","equipmentId":"eq-1","borrowerName":"Somchai Jaidee","startAt":"2026-10-20T09:00:00.000Z","endAt":"2026-10-20T11:00:00.000Z","purpose":"Class presentation"}
 ```
 
-## 4. Read one booking — success
+The returned ID was used as:
+
+```bash
+BOOKING_ID="98c768ec-5302-494a-8208-42a6913a7f45"
+```
+
+## 4. Get one booking — expect `200`
 
 ```text
-GET /bookings/04ba7f1d-16a3-49a1-aea9-dca4f159ac31
+GET /bookings/$BOOKING_ID
 HTTP/2 200
-{"id":"04ba7f1d-16a3-49a1-aea9-dca4f159ac31","equipmentId":"eq-2","borrowerName":"Final Production Test","startAt":"2026-11-01T09:00:00.000Z","endAt":"2026-11-01T11:00:00.000Z","purpose":"Final CRUD verification"}
+{"id":"98c768ec-5302-494a-8208-42a6913a7f45","equipmentId":"eq-1","borrowerName":"Somchai Jaidee","startAt":"2026-10-20T09:00:00.000Z","endAt":"2026-10-20T11:00:00.000Z","purpose":"Class presentation"}
 ```
 
-## 5. Overlapping booking — conflict error
+## 5. Update a booking — expect `200`
 
-```text
-POST /bookings (eq-1, 10:00–12:00)
-HTTP/2 409
-{"error":"Booking time conflicts with an existing booking"}
+Request body:
+
+```json
+{
+  "equipmentId": "eq-1",
+  "borrowerName": "Somchai Jaidee",
+  "startAt": "2026-10-20T12:00:00.000Z",
+  "endAt": "2026-10-20T14:00:00.000Z",
+  "purpose": "Updated class presentation"
+}
 ```
 
-## 6. Invalid time range — validation error
+Response:
 
 ```text
-POST /bookings (startAt 13:00, endAt 12:00)
+PATCH /bookings/$BOOKING_ID
+HTTP/2 200
+{"id":"98c768ec-5302-494a-8208-42a6913a7f45","equipmentId":"eq-1","borrowerName":"Somchai Jaidee","startAt":"2026-10-20T12:00:00.000Z","endAt":"2026-10-20T14:00:00.000Z","purpose":"Updated class presentation"}
+```
+
+## 6. Invalid time range — expect `400`
+
+Request body used the guide's values: `startAt` 11:00 and `endAt` 09:00.
+
+```text
+POST /bookings
 HTTP/2 400
 {"error":"startAt must be before endAt"}
 ```
 
-## 7. Missing booking — not-found error
+## 7. Overlapping booking — expect `409`
+
+The update in step 5 leaves `eq-1` booked from 12:00 to 14:00. The guide's
+12:30–13:30 request was rejected:
+
+```text
+POST /bookings
+HTTP/2 409
+{"error":"Booking time conflicts with an existing booking"}
+```
+
+## 8. Missing booking — expect `404`
 
 ```text
 GET /bookings/not-found
@@ -63,17 +111,19 @@ HTTP/2 404
 {"error":"Booking not found"}
 ```
 
-## 8. Update and delete — success
+## 9. Delete a booking — expect `204`
 
 ```text
-PATCH /bookings/04ba7f1d-16a3-49a1-aea9-dca4f159ac31
-HTTP/2 200
-{"id":"04ba7f1d-16a3-49a1-aea9-dca4f159ac31","equipmentId":"eq-2","borrowerName":"Final Production Test","startAt":"2026-11-01T09:00:00.000Z","endAt":"2026-11-01T11:00:00.000Z","purpose":"Updated final CRUD verification"}
-
-DELETE /bookings/04ba7f1d-16a3-49a1-aea9-dca4f159ac31
+DELETE /bookings/$BOOKING_ID
 HTTP/2 204
 ```
 
-After deletion, the same GET returned `404 Booking not found`, confirming that
-the delete was persistent. The final production list returned `[]`, so the
-verification booking was removed.
+A follow-up GET for the same ID returned:
+
+```text
+HTTP/2 404
+{"error":"Booking not found"}
+```
+
+This confirms that the delete persisted. All error responses used the required
+JSON format `{ "error": "..." }`.
